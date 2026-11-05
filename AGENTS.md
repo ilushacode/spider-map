@@ -9,6 +9,7 @@
 - `npm run lint` — oxlint (конфиг `.oxlintrc.json`)
 - `npm run preview` — просмотр собранной версии
 - `npm test` — Vitest (jsdom, тесты рядом с кодом: `*.test.ts(x)`)
+- В PowerShell этого окружения `npm` может блокироваться execution policy — используй `npm.cmd`.
 
 ## Git и коммиты
 - Репозиторий инициализирован; коммить после успешной реализации каждой крупной функции.
