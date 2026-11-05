@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, Copy, ExternalLink, EyeOff, GitBranch, Minimize2, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, EyeOff, GitBranch, Link2, Minimize2, X } from 'lucide-react'
 import { useGraphStore } from '../../graph/graph-store'
 import { expandNode } from '../../features/investigation/orchestrator'
 import { CONFIDENCE_LABELS, LOAD_STATE_LABELS, NODE_VISUALS } from '../graph/node-visuals'
@@ -44,6 +44,7 @@ export default function NodeDetailsPanel() {
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode)
   const hideNodes = useGraphStore((state) => state.hideNodes)
   const [copied, setCopied] = useState(false)
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [expanding, setExpanding] = useState(false)
 
   const related = useMemo(() => {
@@ -99,6 +100,16 @@ export default function NodeDetailsPanel() {
       window.setTimeout(() => setCopied(false), 1400)
     } catch {
       setCopied(false)
+    }
+  }
+
+  const copyUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedUrl(url)
+      window.setTimeout(() => setCopiedUrl(null), 1400)
+    } catch {
+      setCopiedUrl(null)
     }
   }
 
@@ -185,7 +196,7 @@ export default function NodeDetailsPanel() {
           <h3>Источники</h3>
           <ul className="evidence-list">
             {node.sources.map((evidence, index) => (
-              <li key={`${evidence.url}-${index}`}>
+              <li key={`${evidence.url}-${index}`} className="evidence-row">
                 <a href={evidence.url} target="_blank" rel="noreferrer">
                   <span>{evidence.sourceName}</span>
                   <span className="evidence-meta">
@@ -193,6 +204,18 @@ export default function NodeDetailsPanel() {
                     <ExternalLink size={12} strokeWidth={1.5} />
                   </span>
                 </a>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => void copyUrl(evidence.url)}
+                  title="Скопировать URL источника"
+                >
+                  {copiedUrl === evidence.url ? (
+                    <Check size={13} strokeWidth={1.5} />
+                  ) : (
+                    <Link2 size={13} strokeWidth={1.5} />
+                  )}
+                </button>
               </li>
             ))}
             {node.sources.length === 0 ? <li className="muted small">Источник не указан</li> : null}
