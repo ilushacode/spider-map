@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import './styles/app.css'
 import GraphView from './components/graph/GraphView'
+import EdgeDetailsPanel from './components/node-details/EdgeDetailsPanel'
 import NodeDetailsPanel from './components/node-details/NodeDetailsPanel'
 import Sidebar from './components/layout/Sidebar'
 import TopBar from './components/layout/TopBar'
@@ -106,6 +107,7 @@ export default function App() {
           <GraphView />
           <EmptyState running={running} />
           <NodeDetailsPanel />
+          <EdgeDetailsPanel />
         </main>
       </div>
 
