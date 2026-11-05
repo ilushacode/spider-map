@@ -16,12 +16,15 @@ function StatusBar() {
   const selectedNodeId = useGraphStore((state) => state.selectedNodeId)
 
   const selected = selectedNodeId ? nodes[selectedNodeId] : undefined
+  const rootCount = investigation
+    ? investigation.rootNodeIds?.length || (investigation.rootNodeId ? 1 : 0)
+    : 0
 
   return (
     <footer className="statusbar">
       <span>
         {investigation
-          ? `${investigation.status} · ${Object.keys(nodes).length} узлов · ${Object.keys(edges).length} связей`
+          ? `${investigation.status} · ${rootCount} адрес(ов) · ${Object.keys(nodes).length} узлов · ${Object.keys(edges).length} связей`
           : 'Готов к исследованию'}
       </span>
       <span className="statusbar__right">
@@ -64,16 +67,18 @@ export default function App() {
   const [running, setRunning] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const controllerRef = useRef<AbortController | null>(null)
+  const investigation = useGraphStore((state) => state.investigation)
+  const canAppend = Boolean(investigation)
 
   const onRun = useCallback(
-    async (input: NormalizedInput) => {
+    async (input: NormalizedInput, append = false) => {
       controllerRef.current?.abort()
       const controller = new AbortController()
       controllerRef.current = controller
       setRunning(true)
       const budget = window.setTimeout(() => controller.abort(), 75_000)
       try {
-        await runInvestigation(input, mode, controller.signal)
+        await runInvestigation(input, mode, controller.signal, append)
       } finally {
         window.clearTimeout(budget)
         if (controllerRef.current === controller) {
@@ -95,9 +100,10 @@ export default function App() {
       <TopBar
         mode={mode}
         onModeChange={setMode}
-        onRun={(input) => void onRun(input)}
+        onRun={(input, append) => void onRun(input, append)}
         onStop={onStop}
         running={running}
+        canAppend={canAppend}
         onToggleSidebar={() => setSidebarOpen((open) => !open)}
       />
 

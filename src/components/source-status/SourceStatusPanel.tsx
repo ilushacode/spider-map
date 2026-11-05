@@ -73,7 +73,10 @@ export default function SourceStatusPanel() {
             <li key={source.id} className="source-row">
               <span className={`status-dot is-${status}`} aria-hidden="true" />
               <div className="source-row__body">
-                <span className="source-row__name">{source.name}</span>
+                <span className="source-row__name">
+                  {source.name}
+                  {source.origin === 'ru' ? <span className="source-ru">RU</span> : null}
+                </span>
                 <span className="source-row__meta">
                   {STATUS_LABELS[status]}
                   {sourceResults.length > 0 ? ` · ${sourceResults.length} запросов` : ''}

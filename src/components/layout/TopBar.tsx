@@ -8,9 +8,10 @@ import SpiderMark from '../common/SpiderMark'
 interface TopBarProps {
   mode: InvestigationMode
   onModeChange: (mode: InvestigationMode) => void
-  onRun: (input: NormalizedInput) => void
+  onRun: (input: NormalizedInput, append: boolean) => void
   onStop: () => void
   running: boolean
+  canAppend: boolean
   onToggleSidebar: () => void
 }
 
@@ -20,6 +21,7 @@ export default function TopBar({
   onRun,
   onStop,
   running,
+  canAppend,
   onToggleSidebar,
 }: TopBarProps) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -45,7 +47,7 @@ export default function TopBar({
       </div>
 
       <div className="topbar__search">
-        <SearchBar onRun={onRun} onStop={onStop} running={running} />
+        <SearchBar onRun={onRun} onStop={onStop} running={running} canAppend={canAppend} />
       </div>
 
       <div className="topbar__block topbar__mode">

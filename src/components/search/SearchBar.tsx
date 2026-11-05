@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Clock3, Play, Search, Square, X } from 'lucide-react'
+import { Clock3, Play, Plus, Search, Square, X } from 'lucide-react'
 import { normalizeInput } from '../../graph/normalize'
 import type { NormalizedInput } from '../../graph/types'
 
@@ -16,19 +16,20 @@ function loadHistory(): string[] {
 }
 
 interface SearchBarProps {
-  onRun: (input: NormalizedInput) => void
+  onRun: (input: NormalizedInput, append: boolean) => void
   onStop: () => void
   running: boolean
+  canAppend: boolean
 }
 
-export default function SearchBar({ onRun, onStop, running }: SearchBarProps) {
+export default function SearchBar({ onRun, onStop, running, canAppend }: SearchBarProps) {
   const [value, setValue] = useState('')
   const [history, setHistory] = useState<string[]>(loadHistory)
   const [showHistory, setShowHistory] = useState(false)
   const normalized = useMemo(() => normalizeInput(value), [value])
   const hasError = value.trim().length > 0 && normalized.type === 'unknown'
 
-  const submit = () => {
+  const submit = (append: boolean) => {
     if (running) return
     const result = normalizeInput(value)
     if (result.type === 'unknown') return
@@ -42,7 +43,7 @@ export default function SearchBar({ onRun, onStop, running }: SearchBarProps) {
       return next
     })
     setShowHistory(false)
-    onRun(result)
+    onRun(result, append)
   }
 
   return (
@@ -51,7 +52,7 @@ export default function SearchBar({ onRun, onStop, running }: SearchBarProps) {
         className={`search__field${hasError ? ' has-error' : ''}`}
         onSubmit={(event) => {
           event.preventDefault()
-          submit()
+          submit(false)
         }}
       >
         <Search size={16} strokeWidth={1.5} aria-hidden="true" />
@@ -82,9 +83,23 @@ export default function SearchBar({ onRun, onStop, running }: SearchBarProps) {
             <Square size={14} strokeWidth={1.5} />
           </button>
         ) : (
-          <button type="submit" className="search__action" disabled={normalized.type === 'unknown'} title="Запустить">
-            <Play size={14} strokeWidth={1.5} />
-          </button>
+          <>
+            {canAppend ? (
+              <button
+                type="button"
+                className="search__append"
+                onClick={() => submit(true)}
+                disabled={normalized.type === 'unknown'}
+                title="Добавить к текущему графу"
+                aria-label="Добавить к текущему графу"
+              >
+                <Plus size={14} strokeWidth={1.5} />
+              </button>
+            ) : null}
+            <button type="submit" className="search__action" disabled={normalized.type === 'unknown'} title="Запустить">
+              <Play size={14} strokeWidth={1.5} />
+            </button>
+          </>
         )}
       </form>
 
