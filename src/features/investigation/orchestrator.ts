@@ -755,3 +755,55 @@ export async function runInvestigation(
 export function isSupportedInput(type: InputType): boolean {
   return type !== 'unknown' && type !== 'url'
 }
+
+export async function expandNode(nodeId: string, signal: AbortSignal): Promise<void> {
+  const node = useGraphStore.getState().nodes[nodeId]
+  if (!node || node.loadState === 'loading') return
+  if (!['domain', 'ip', 'prefix', 'asn', 'certificate', 'dns-record'].includes(node.type)) {
+    markRoot(nodeId, 'source-limited', 'Для этого типа узла нет правил раскрытия')
+    return
+  }
+
+  const context: RunContext = {
+    signal,
+    mode: 'full',
+    seenAsns: new Set(),
+    seenIps: new Set(),
+    seenPrefixes: new Set(),
+    deferred: 0,
+  }
+  markRoot(nodeId, 'loading')
+
+  try {
+    if (node.type === 'domain') {
+      await processDomain(context, node.identifier, nodeId)
+    } else if (node.type === 'ip') {
+      await processIp(context, node.identifier)
+    } else if (node.type === 'asn') {
+      await processAsn(context, node.identifier)
+    } else if (node.type === 'prefix') {
+      await processPrefix(context, node.identifier)
+    } else if (node.type === 'certificate') {
+      const names = Array.isArray(node.metadata.names) ? node.metadata.names : []
+      const evidence = evidenceFromSource('crt-sh', String(node.metadata.sourceUrl ?? 'https://crt.sh/'))
+      for (const raw of names.slice(0, MAX_NAMES)) {
+        if (typeof raw !== 'string') continue
+        const name = raw.replace(/^\*\./, '').toLowerCase()
+        const domain = createNode({ type: 'domain', identifier: name, evidence })
+        if (addNodeSafe(domain)) {
+          addEdgeSafe(createEdge({ type: 'CERTIFICATE_COVERS', source: nodeId, target: domain.id, evidence }))
+        }
+      }
+      markRoot(nodeId, 'explored')
+    } else {
+      markRoot(nodeId, 'explored')
+    }
+
+    if (useGraphStore.getState().nodes[nodeId]?.loadState === 'loading') {
+      markRoot(nodeId, 'explored')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Неизвестная ошибка'
+    markRoot(nodeId, 'error', message)
+  }
+}
