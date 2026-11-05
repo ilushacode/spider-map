@@ -10,7 +10,7 @@ export const ripestatEnvelopeSchema = z.object({
 export const networkInfoSchema = z.object({
   resource: z.string().optional(),
   prefix: z.string().nullable().optional(),
-  asns: z.array(z.number()).optional(),
+  asns: z.array(z.union([z.number(), z.string()])).optional(),
 })
 
 export const asOverviewSchema = z.object({
@@ -62,7 +62,7 @@ export const lookingGlassSchema = z.object({
         peers: z
           .array(
             z.object({
-              asn_origin: z.number().optional(),
+              asn_origin: z.union([z.number(), z.string()]).optional(),
               as_path: z.string().optional(),
               next_hop: z.string().optional(),
               last_updated: z.string().optional(),
@@ -106,16 +106,15 @@ export const routingHistorySchema = z.object({
     .optional(),
 })
 
+const prefixCountPointSchema = z.object({
+  prefixes: z.number().optional(),
+  timestamp: z.string().optional(),
+  'address-space': z.number().optional(),
+})
+
 export const prefixCountSchema = z.object({
   resource: z.string().optional(),
-  timeseries: z
-    .array(
-      z.object({
-        starttime: z.string().optional(),
-        endtime: z.string().optional(),
-        v4: z.number().optional(),
-        v6: z.number().optional(),
-      }),
-    )
-    .optional(),
+  ipv4: z.array(prefixCountPointSchema).optional(),
+  ipv6: z.array(prefixCountPointSchema).optional(),
+  resolution: z.string().optional(),
 })

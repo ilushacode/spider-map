@@ -173,7 +173,9 @@ export async function fetchNetworkInfo(
     data: {
       resource: result.data.resource ?? resource,
       prefix: result.data.prefix ?? null,
-      asns: result.data.asns ?? [],
+      asns: (result.data.asns ?? [])
+        .map((value) => Number(value))
+        .filter((value) => Number.isSafeInteger(value) && value > 0),
     },
   }
 }
@@ -253,7 +255,7 @@ export async function fetchLookingGlass(
         rrc: rrc.rrc,
         location: rrc.location,
         peers: (rrc.peers ?? []).map((peer) => ({
-          asnOrigin: peer.asn_origin,
+          asnOrigin: peer.asn_origin === undefined ? undefined : Number(peer.asn_origin),
           asPath: peer.as_path,
           nextHop: peer.next_hop,
           lastUpdated: peer.last_updated,
@@ -336,11 +338,23 @@ export async function fetchPrefixCount(
 ): Promise<SourceResult<PrefixCount>> {
   const result = await ripestatRequest('prefix-count', { resource: asn }, prefixCountSchema, signal)
   if (!result.data) return stripData(result)
+  const series = new Map<string, { starttime?: string; endtime?: string; v4?: number; v6?: number }>()
+  for (const point of result.data.ipv4 ?? []) {
+    if (!point.timestamp) continue
+    series.set(point.timestamp, { starttime: point.timestamp, v4: point.prefixes })
+  }
+  for (const point of result.data.ipv6 ?? []) {
+    if (!point.timestamp) continue
+    const current = series.get(point.timestamp) ?? { starttime: point.timestamp }
+    series.set(point.timestamp, { ...current, v6: point.prefixes })
+  }
   return {
     ...result,
     data: {
       resource: result.data.resource ?? asn,
-      series: result.data.timeseries ?? [],
+      series: [...series.values()].sort((a, b) =>
+        (a.starttime ?? '').localeCompare(b.starttime ?? ''),
+      ),
     },
   }
 }

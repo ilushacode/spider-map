@@ -60,13 +60,13 @@ describe('RIPEstat adapter', () => {
   beforeEach(() => responseCache.clear())
   afterEach(() => vi.unstubAllGlobals())
 
-  it('normalizes network-info', async () => {
+  it('normalizes network-info string ASNs', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         json({
           status: 'ok',
-          data: { resource: '1.1.1.1', prefix: '1.1.1.0/24', asns: [13335] },
+          data: { resource: '1.1.1.1', prefix: '1.1.1.0/24', asns: ['13335'] },
         }),
       ),
     )
@@ -75,13 +75,17 @@ describe('RIPEstat adapter', () => {
     expect(result.data).toEqual({ resource: '1.1.1.1', prefix: '1.1.1.0/24', asns: [13335] })
   })
 
-  it('normalizes prefix-count', async () => {
+  it('normalizes prefix-count series', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(
         json({
           status: 'ok',
-          data: { resource: 'AS13335', timeseries: [{ starttime: '2024-01-01', v4: 10, v6: 4 }] },
+          data: {
+            resource: '13335',
+            ipv4: [{ prefixes: 10, timestamp: '2024-01-01', 'address-space': 0 }],
+            ipv6: [{ prefixes: 4, timestamp: '2024-01-01', 'address-space': 0 }],
+          },
         }),
       ),
     )
