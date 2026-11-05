@@ -216,6 +216,13 @@
   color: var(--text-3);
 }
 
+.app .search__field input:focus,
+.app .search__field input:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+}
+
 .search__clear,
 .search__action {
   width: 26px;
