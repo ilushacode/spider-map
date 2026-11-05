@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -9,6 +9,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
+  useNodesInitialized,
   useNodesState,
   useReactFlow,
   type Edge,
@@ -19,120 +20,20 @@ import {
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Crosshair, Maximize2, RefreshCw } from 'lucide-react'
 import { useGraphStore } from '../../graph/graph-store'
-import type {
-  Confidence,
-  EdgeType,
-  InternetEdge,
-  InternetNode,
-  NodeType,
-} from '../../graph/types'
+import type { InternetNode } from '../../graph/types'
 import InternetNodeView from './InternetNodeView'
 import GroupNodeView, { type GroupFlowNode } from './GroupNodeView'
 import { GRAPH_GROUPS, getGraphGroup, type GraphGroupId } from './groups'
 import { layoutGraph } from './graph-layout'
 import { EDGE_LABELS, NODE_VISUALS } from './node-visuals'
-
-const CONFIDENCE_RANK: Record<Confidence, number> = {
-  unknown: 0,
-  inferred: 1,
-  observed: 2,
-  corroborated: 3,
-  authoritative: 4,
-}
+import {
+  buildAdjacency,
+  computeCategoryView,
+  computeGroups,
+  reachableFrom,
+} from './view-model'
 
 const NODE_TYPES_MAP = { internet: InternetNodeView, group: GroupNodeView }
-
-function isNodeVisible(
-  node: InternetNode,
-  hidden: NodeType[],
-  hiddenIds: string[],
-  search: string,
-  minConfidence: Confidence | 'all',
-): boolean {
-  if (hidden.includes(node.type) || hiddenIds.includes(node.id)) return false
-  if (minConfidence !== 'all') {
-    const rank = Math.max(
-      0,
-      ...node.sources.map((evidence) => CONFIDENCE_RANK[evidence.confidence]),
-    )
-    if (rank < CONFIDENCE_RANK[minConfidence]) return false
-  }
-  if (!search) return true
-  const query = search.toLowerCase()
-  return (
-    node.label.toLowerCase().includes(query) ||
-    node.identifier.toLowerCase().includes(query) ||
-    node.type.includes(query)
-  )
-}
-
-function isEdgeVisible(
-  edge: InternetEdge,
-  hidden: EdgeType[],
-  minConfidence: Confidence | 'all',
-): boolean {
-  if (hidden.includes(edge.type)) return false
-  if (minConfidence !== 'all' && CONFIDENCE_RANK[edge.confidence] < CONFIDENCE_RANK[minConfidence]) {
-    return false
-  }
-  return true
-}
-
-function buildAdjacency(edges: InternetEdge[]): Map<string, Set<string>> {
-  const map = new Map<string, Set<string>>()
-  for (const edge of edges) {
-    if (!map.has(edge.source)) map.set(edge.source, new Set())
-    if (!map.has(edge.target)) map.set(edge.target, new Set())
-    map.get(edge.source)?.add(edge.target)
-    map.get(edge.target)?.add(edge.source)
-  }
-  return map
-}
-
-function reachableFrom(start: string, adjacency: Map<string, Set<string>>): Set<string> {
-  const visited = new Set<string>([start])
-  const queue = [start]
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) break
-    for (const next of adjacency.get(current) ?? []) {
-      if (visited.has(next)) continue
-      visited.add(next)
-      queue.push(next)
-    }
-  }
-  return visited
-}
-
-function pathToRoots(
-  target: string,
-  roots: string[],
-  adjacency: Map<string, Set<string>>,
-): string[] {
-  if (roots.includes(target)) return [target]
-  const rootSet = new Set(roots)
-  const queue = [target]
-  const parent = new Map<string, string | null>([[target, null]])
-  while (queue.length > 0) {
-    const current = queue.shift()
-    if (!current) break
-    for (const next of adjacency.get(current) ?? []) {
-      if (parent.has(next)) continue
-      parent.set(next, current)
-      if (rootSet.has(next)) {
-        const path: string[] = []
-        let cursor: string | null = next
-        while (cursor) {
-          path.push(cursor)
-          cursor = parent.get(cursor) ?? null
-        }
-        return path
-      }
-      queue.push(next)
-    }
-  }
-  return [target]
-}
 
 function GraphCanvas() {
   const storeNodes = useGraphStore((state) => state.nodes)
@@ -146,8 +47,17 @@ function GraphCanvas() {
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node>([])
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [pendingEdges, setPendingEdges] = useState<Edge[]>([])
   const [layoutVersion, setLayoutVersion] = useState(0)
+  const [readyNodeSignature, setReadyNodeSignature] = useState('')
   const { fitView } = useReactFlow()
+  const nodesInitialized = useNodesInitialized()
+  const lastFitKeyRef = useRef('')
+  const lastNodeSignatureRef = useRef('')
+  const lastEdgeSignatureRef = useRef('')
+  const appliedEdgeSignatureRef = useRef('')
+  const lastLayoutVersionRef = useRef(0)
+  const lastFocusRef = useRef<GraphGroupId | null>(null)
 
   const rootIds = useMemo(() => {
     const ids = investigation?.rootNodeIds ?? []
@@ -173,67 +83,25 @@ function GraphCanvas() {
     return map
   }, [adjacency, rootIds])
 
-  const allReachable = useMemo(() => {
-    const set = new Set<string>(rootIds)
-    for (const reachable of reachableByRoot.values()) {
-      for (const id of reachable) set.add(id)
-    }
-    return set
-  }, [reachableByRoot, rootIds])
-
   const groups = useMemo(
-    () =>
-      GRAPH_GROUPS.map((group) => {
-        const nodes = [...allReachable]
-          .map((id) => storeNodes[id])
-          .filter(
-            (node): node is InternetNode =>
-              Boolean(node) && !rootIds.includes(node.id) && group.types.includes(node.type),
-          )
-        const shared = nodes.filter(
-          (node) =>
-            rootIds.filter((rootId) => reachableByRoot.get(rootId)?.has(node.id)).length > 1,
-        ).length
-        const rootCounts = rootIds
-          .map((rootId) => ({
-            rootId,
-            count: nodes.filter((node) => reachableByRoot.get(rootId)?.has(node.id)).length,
-          }))
-          .filter((item) => item.count > 0)
-        return { group, nodes, shared, rootCounts }
-      }).filter((item) => item.nodes.length > 0),
-    [allReachable, storeNodes, rootIds, reachableByRoot],
+    () => computeGroups(storeNodes, rootIds, reachableByRoot, GRAPH_GROUPS),
+    [storeNodes, rootIds, reachableByRoot],
   )
 
-  const categoryView = useMemo(() => {
-    if (!focusGroup) return null
-    const group = getGraphGroup(focusGroup)
-    const categoryNodes = [...allReachable]
-      .map((id) => storeNodes[id])
-      .filter(
-        (node): node is InternetNode =>
-          Boolean(node) &&
-          group.types.includes(node.type) &&
-          isNodeVisible(node, filters.hiddenNodeTypes, filters.hiddenNodeIds, filters.search, filters.minConfidence),
-      )
-
-    const visible = new Set<string>(rootIds)
-    for (const node of categoryNodes) {
-      visible.add(node.id)
-      for (const pathId of pathToRoots(node.id, rootIds, adjacency)) visible.add(pathId)
-    }
-
-    const nodes = [...visible]
-      .map((id) => storeNodes[id])
-      .filter((node): node is InternetNode => Boolean(node))
-    const edges = Object.values(storeEdges).filter(
-      (edge) =>
-        visible.has(edge.source) &&
-        visible.has(edge.target) &&
-        isEdgeVisible(edge, filters.hiddenEdgeTypes, filters.minConfidence),
-    )
-    return { group, nodes, edges }
-  }, [focusGroup, allReachable, storeNodes, rootIds, filters, adjacency, storeEdges])
+  const categoryView = useMemo(
+    () =>
+      focusGroup
+        ? computeCategoryView(
+            storeNodes,
+            storeEdges,
+            rootIds,
+            adjacency,
+            getGraphGroup(focusGroup),
+            filters,
+          )
+        : null,
+    [focusGroup, storeNodes, storeEdges, rootIds, adjacency, filters],
+  )
 
   const neighbours = useMemo(() => {
     if (!selectedNodeId) return null
@@ -246,22 +114,88 @@ function GraphCanvas() {
   }, [selectedNodeId, storeEdges])
 
   useEffect(() => {
-    if (categoryView) {
-      const layout = layoutGraph(categoryView.nodes, categoryView.edges)
-      setRfNodes(
-        categoryView.nodes.map((node) => ({
+    const nodeSignature = categoryView
+      ? JSON.stringify(
+          categoryView.nodes.map((node) => [
+            node.id,
+            node.id === selectedNodeId,
+            Boolean(neighbours && !neighbours.has(node.id)),
+          ]),
+        )
+      : JSON.stringify({
+          roots: rootIds,
+          groups: groups.map((item) => [
+            item.group.id,
+            item.nodes.length,
+            item.shared,
+            item.group.label,
+          ]),
+          selected: selectedNodeId,
+        })
+
+    if (nodeSignature !== lastNodeSignatureRef.current) {
+      lastNodeSignatureRef.current = nodeSignature
+      setReadyNodeSignature('')
+
+      if (categoryView) {
+        const forceLayout = lastLayoutVersionRef.current !== layoutVersion
+        if (forceLayout) lastLayoutVersionRef.current = layoutVersion
+        const focusChanged = lastFocusRef.current !== focusGroup
+        if (focusChanged) lastFocusRef.current = focusGroup
+        const useLayoutForAll = forceLayout || focusChanged
+        const layout = layoutGraph(categoryView.nodes, categoryView.edges)
+        setRfNodes((current) => {
+          const positions = new Map(current.map((node) => [node.id, node.position]))
+          return categoryView.nodes.map((node) => ({
+            id: node.id,
+            type: 'internet',
+            position:
+              useLayoutForAll
+                ? (layout.get(node.id) ?? { x: 0, y: 0 })
+                : (positions.get(node.id) ?? layout.get(node.id) ?? { x: 0, y: 0 }),
+            selected: node.id === selectedNodeId,
+            data: {
+              node,
+              dimmed: Boolean(neighbours && !neighbours.has(node.id)),
+            },
+          }))
+        })
+      } else {
+        const rootNodes = rootIds
+          .map((id) => storeNodes[id])
+          .filter((node): node is InternetNode => Boolean(node))
+        const rootFlowNodes: Node[] = rootNodes.map((node, index) => ({
           id: node.id,
           type: 'internet',
-          position: layout.get(node.id) ?? { x: 0, y: 0 },
-          selected: node.id === selectedNodeId,
-          data: {
-            node,
-            dimmed: Boolean(neighbours && !neighbours.has(node.id)),
+          position: {
+            x: 0,
+            y: index * 120 - (rootNodes.length - 1) * 60,
           },
-        })),
-      )
-      setRfEdges(
-        categoryView.edges.map((edge) => {
+          selected: node.id === selectedNodeId,
+          data: { node, dimmed: false },
+        }))
+        const groupedNodes: Node[] = groups.map((item, index) => ({
+          id: `group:${item.group.id}`,
+          type: 'group',
+          position: {
+            x: 360,
+            y: index * 96 - (groups.length - 1) * 48,
+          },
+          data: {
+            groupId: item.group.id,
+            label: item.group.label,
+            count: item.nodes.length,
+            shared: item.shared,
+            color: item.group.color,
+            icon: item.group.icon,
+          } satisfies GroupFlowNode['data'],
+        }))
+        setRfNodes([...rootFlowNodes, ...groupedNodes])
+      }
+    }
+
+    const desiredEdges: Edge[] = categoryView
+      ? categoryView.edges.map((edge) => {
           const connected = Boolean(
             selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId),
           )
@@ -283,61 +217,21 @@ function GraphCanvas() {
             },
             data: { edge },
           }
-        }),
-      )
-      return
-    }
-
-    const rootNodes = rootIds
-      .map((id) => storeNodes[id])
-      .filter((node): node is InternetNode => Boolean(node))
-    const groupedNodes: Node[] = groups.map((item, index) => ({
-      id: `group:${item.group.id}`,
-      type: 'group',
-      position: {
-        x: 360,
-        y: index * 96 - (groups.length - 1) * 48,
-      },
-      data: {
-        groupId: item.group.id,
-        label: item.group.label,
-        count: item.nodes.length,
-        shared: item.shared,
-        color: item.group.color,
-        icon: item.group.icon,
-      } satisfies GroupFlowNode['data'],
-    }))
-
-    const rootFlowNodes: Node[] = rootNodes.map((node, index) => ({
-      id: node.id,
-      type: 'internet',
-      position: {
-        x: 0,
-        y: index * 120 - (rootNodes.length - 1) * 60,
-      },
-      selected: node.id === selectedNodeId,
-      data: { node, dimmed: false },
-    }))
-
-    const groupEdges: Edge[] = groups.flatMap((item) =>
-      item.rootCounts.map((rootCount) => ({
-        id: `group-edge:${rootCount.rootId}:${item.group.id}`,
-        source: rootCount.rootId,
-        target: `group:${item.group.id}`,
-        label: String(rootCount.count),
-        type: 'smoothstep',
-        style: {
-          stroke: 'rgba(232,235,242,0.24)',
-          strokeDasharray: '5 5',
-          strokeWidth: 1,
-        },
-        labelStyle: { fill: '#8f96a5', fontSize: 10, fontFamily: 'var(--mono)' },
-        labelBgStyle: { fill: '#0f1116', fillOpacity: 0.9 },
-      })),
+        })
+      : []
+    const edgeSignature = JSON.stringify(
+      desiredEdges.map((edge) => [
+        edge.id,
+        edge.source,
+        edge.target,
+        edge.selected,
+        edge.animated,
+      ]),
     )
-
-    setRfNodes([...rootFlowNodes, ...groupedNodes])
-    setRfEdges(groupEdges)
+    if (edgeSignature !== lastEdgeSignatureRef.current) {
+      lastEdgeSignatureRef.current = edgeSignature
+      setPendingEdges(desiredEdges)
+    }
   }, [
     categoryView,
     groups,
@@ -347,16 +241,50 @@ function GraphCanvas() {
     selectedEdgeId,
     neighbours,
     layoutVersion,
+    focusGroup,
     setRfNodes,
-    setRfEdges,
   ])
 
   useEffect(() => {
+    if (!nodesInitialized) return
+    const timer = window.setTimeout(() => {
+      setReadyNodeSignature(lastNodeSignatureRef.current)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [rfNodes, nodesInitialized])
+
+  useEffect(() => {
+    if (!nodesInitialized) return
+    if (readyNodeSignature !== lastNodeSignatureRef.current) return
+    const nodeIds = new Set(rfNodes.map((node) => node.id))
+    if (!pendingEdges.every((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))) {
+      return
+    }
+    const signature = JSON.stringify(
+      pendingEdges.map((edge) => [edge.id, edge.source, edge.target, edge.selected, edge.animated]),
+    )
+    if (signature === appliedEdgeSignatureRef.current) return
+    appliedEdgeSignatureRef.current = signature
+    setRfEdges(pendingEdges)
+  }, [pendingEdges, rfNodes, nodesInitialized, readyNodeSignature, setRfEdges])
+
+  useEffect(() => {
+    if (!nodesInitialized) return
+    const status = investigation?.status
+    const finished =
+      status === 'complete' ||
+      status === 'partial' ||
+      status === 'cancelled' ||
+      status === 'error'
+    const fitKey = `${rootKey}:${focusGroup ?? ''}`
+    const rootChanged = lastFitKeyRef.current !== fitKey
+    if (!finished && !rootChanged) return
+    lastFitKeyRef.current = fitKey
     const timer = window.setTimeout(() => {
       void fitView({ padding: 0.24, duration: 300 })
     }, 80)
     return () => window.clearTimeout(timer)
-  }, [focusGroup, rootKey, investigation?.status, fitView])
+  }, [focusGroup, rootKey, investigation?.status, nodesInitialized, fitView])
 
   const onNodeClick: NodeMouseHandler = useCallback(
     (_event, node) => {
