@@ -35,6 +35,8 @@ const MAX_PREFIXES = 25
 const MAX_CERTIFICATES = 50
 const MAX_NAMES = 100
 
+let deferredCount = 0
+
 interface RunContext {
   signal: AbortSignal
   mode: InvestigationMode
@@ -55,6 +57,7 @@ function sourceKey(sourceId: string, endpoint: string, resource: string): string
 function addNodeSafe(node: InternetNode): boolean {
   const store = useGraphStore.getState()
   if (!store.nodes[node.id] && Object.keys(store.nodes).length >= MAX_NODES) {
+    deferredCount += 1
     return false
   }
   store.addNode(node)
@@ -64,6 +67,7 @@ function addNodeSafe(node: InternetNode): boolean {
 function addEdgeSafe(edge: ReturnType<typeof createEdge>): boolean {
   const store = useGraphStore.getState()
   if (!store.edges[edge.id] && Object.keys(store.edges).length >= MAX_EDGES) {
+    deferredCount += 1
     return false
   }
   store.addEdge(edge)
@@ -786,6 +790,7 @@ export async function runInvestigation(
 ): Promise<void> {
   const store = useGraphStore.getState()
   store.reset()
+  deferredCount = 0
   const root = rootNode(input)
   const investigation: Investigation = {
     id: newId(),
@@ -837,7 +842,7 @@ export async function runInvestigation(
       finishedAt: new Date().toISOString(),
       counts: {
         ...useGraphStore.getState().investigation!.counts,
-        deferred: context.deferred,
+        deferred: deferredCount,
       },
     })
   } catch (error) {

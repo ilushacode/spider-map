@@ -58,6 +58,13 @@ export default function SourceStatusPanel() {
         </div>
       </div>
 
+      {(investigation?.counts.deferred ?? 0) > 0 ? (
+        <p className="muted small">
+          Отложено из-за лимитов: {investigation?.counts.deferred}. Раскройте узлы вручную, чтобы
+          загрузить больше.
+        </p>
+      ) : null}
+
       <ul className="source-list">
         {DATA_SOURCES.map((source) => {
           const sourceResults = results.filter((result) => result.sourceId === source.id)
