@@ -303,16 +303,19 @@ async function processAsn(context: RunContext, asn: string): Promise<void> {
     }
   }
 
-  await processRoutingHistory(context, asn)
+  await processRoutingHistory(context, asn, asnId)
   markRoot(asnId, 'explored')
 }
 
-async function processRoutingHistory(context: RunContext, resource: string): Promise<void> {
+async function processRoutingHistory(
+  context: RunContext,
+  resource: string,
+  ownerId: string,
+): Promise<void> {
   const history = await fetchRoutingHistory(resource, context.signal)
   record(context, sourceKey('ripestat', 'routing-history', resource), history)
   if (!history.data) return
   const evidence = evidenceFrom(history)
-  const sourceId = `prefix:${resource.toLowerCase()}`
   for (const entry of history.data.origins.slice(0, 10)) {
     if (!entry.origin) continue
     const asn = `AS${entry.origin}`
@@ -320,14 +323,16 @@ async function processRoutingHistory(context: RunContext, resource: string): Pro
     if (!useGraphStore.getState().nodes[asnId]) {
       addNodeSafe(createNode({ type: 'asn', identifier: asn, evidence }))
     }
-    for (const prefix of entry.prefixes.slice(0, 10)) {
-      const prefixNode = createNode({ type: 'prefix', identifier: prefix, evidence })
+    for (const routePrefix of entry.prefixes.slice(0, 10)) {
+      const prefixNode = createNode({ type: 'prefix', identifier: routePrefix, evidence })
       if (addNodeSafe(prefixNode)) {
-        addEdgeSafe(createEdge({ type: 'OBSERVED_IN_ROUTE', source: prefixNode.id, target: asnId, evidence }))
+        addEdgeSafe(
+          createEdge({ type: 'OBSERVED_IN_ROUTE', source: prefixNode.id, target: asnId, evidence }),
+        )
       }
     }
-    if (useGraphStore.getState().nodes[sourceId]) {
-      addEdgeSafe(createEdge({ type: 'OBSERVED_IN_ROUTE', source: sourceId, target: asnId, evidence }))
+    if (useGraphStore.getState().nodes[ownerId]) {
+      addEdgeSafe(createEdge({ type: 'OBSERVED_IN_ROUTE', source: ownerId, target: asnId, evidence }))
     }
   }
 }
@@ -361,6 +366,114 @@ function addRdapEntities(ownerId: string, result: SourceResult<{ entities: Array
           evidence,
         }),
       )
+    }
+  }
+}
+
+async function enrichAsnOverview(
+  context: RunContext,
+  asn: string,
+  fallbackEvidence: ReturnType<typeof evidenceFromSource>,
+): Promise<void> {
+  const asnId = `asn:${asn.toLowerCase()}`
+  const existing = useGraphStore.getState().nodes[asnId]
+  if (existing?.metadata.holder) return
+
+  const overview = await fetchAsOverview(asn, context.signal)
+  record(context, sourceKey('ripestat', 'as-overview', asn), overview)
+  const evidence = overview.data ? evidenceFrom(overview, 'authoritative') : fallbackEvidence
+  const holder = overview.data?.holder
+  const node = createNode({
+    type: 'asn',
+    identifier: asn,
+    label: holder ? `${asn} · ${holder}` : asn,
+    description: holder,
+    evidence,
+    metadata: {
+      holder,
+      announced: overview.data?.announced,
+      block: overview.data?.block,
+    },
+    loadState: overview.status === 'ok' ? 'partial' : 'error',
+    completeness: overview.status === 'ok' ? 'partial' : 'unknown',
+  })
+  addNodeSafe(node)
+  if (holder) {
+    const org = createNode({
+      type: 'organization',
+      identifier: holder,
+      evidence,
+      metadata: { role: 'AS holder', asn },
+    })
+    if (addNodeSafe(org)) {
+      addEdgeSafe(
+        createEdge({
+          type: 'HAS_REGISTRATION',
+          source: asnId,
+          target: org.id,
+          evidence,
+          label: 'зарегистрирован на',
+          explanation: 'Зарегистрированный держатель ASN по данным RIPEstat.',
+        }),
+      )
+    }
+  }
+}
+
+async function processLookingGlass(
+  context: RunContext,
+  resource: string,
+  ownerId: string,
+): Promise<void> {
+  const lookingGlass = await fetchLookingGlass(resource, context.signal)
+  record(context, sourceKey('ripestat', 'looking-glass', resource), lookingGlass)
+  if (!lookingGlass.data) return
+  const lgEvidence = evidenceFrom(lookingGlass)
+  for (const collector of lookingGlass.data.collectors.slice(0, 10)) {
+    const collectorNode = createNode({
+      type: 'route-collector',
+      identifier: collector.rrc ?? collector.location ?? 'RIPE RIS',
+      label: collector.rrc ? `RRC ${collector.rrc}` : 'RIPE RIS',
+      evidence: lgEvidence,
+      metadata: { location: collector.location },
+    })
+    if (addNodeSafe(collectorNode)) {
+      addEdgeSafe(
+        createEdge({
+          type: 'HAS_ROUTE_COLLECTOR',
+          source: ownerId,
+          target: collectorNode.id,
+          evidence: lgEvidence,
+        }),
+      )
+    }
+    for (const peer of collector.peers.slice(0, 10)) {
+      if (!peer.asnOrigin) continue
+      const asn = `AS${peer.asnOrigin}`
+      const peerNode = createNode({ type: 'bgp-peer', identifier: asn, evidence: lgEvidence })
+      if (addNodeSafe(peerNode)) {
+        addEdgeSafe(
+          createEdge({
+            type: 'BGP_PEER_OF',
+            source: collectorNode.id,
+            target: peerNode.id,
+            evidence: lgEvidence,
+            metadata: { asPath: peer.asPath, nextHop: peer.nextHop, lastUpdated: peer.lastUpdated },
+          }),
+        )
+      }
+      const asnNode = createNode({ type: 'asn', identifier: asn, evidence: lgEvidence })
+      if (addNodeSafe(asnNode)) {
+        addEdgeSafe(
+          createEdge({
+            type: 'OBSERVED_IN_ROUTE',
+            source: collectorNode.id,
+            target: asnNode.id,
+            evidence: lgEvidence,
+            metadata: { asPath: peer.asPath },
+          }),
+        )
+      }
     }
   }
 }
@@ -403,6 +516,7 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
       if (addNodeSafe(asnNode)) {
         addEdgeSafe(createEdge({ type: 'ANNOUNCED_BY', source: prefixId, target: asnNode.id, evidence }))
       }
+      await enrichAsnOverview(context, asn, evidence)
     }
   }
 
@@ -443,53 +557,7 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
     }
   }
 
-  const lookingGlass = await fetchLookingGlass(ip, context.signal)
-  record(context, sourceKey('ripestat', 'looking-glass', ip), lookingGlass)
-  if (lookingGlass.data) {
-    const lgEvidence = evidenceFrom(lookingGlass)
-    for (const collector of lookingGlass.data.collectors.slice(0, 10)) {
-      const collectorNode = createNode({
-        type: 'route-collector',
-        identifier: collector.rrc ?? collector.location ?? 'RIPE RIS',
-        label: collector.rrc ? `RRC ${collector.rrc}` : 'RIPE RIS',
-        evidence: lgEvidence,
-        metadata: { location: collector.location },
-      })
-      if (addNodeSafe(collectorNode)) {
-        addEdgeSafe(
-          createEdge({ type: 'HAS_ROUTE_COLLECTOR', source: ipId, target: collectorNode.id, evidence: lgEvidence }),
-        )
-      }
-      for (const peer of collector.peers.slice(0, 10)) {
-        if (!peer.asnOrigin) continue
-        const asn = `AS${peer.asnOrigin}`
-        const peerNode = createNode({ type: 'bgp-peer', identifier: asn, evidence: lgEvidence })
-        if (addNodeSafe(peerNode)) {
-          addEdgeSafe(
-            createEdge({
-              type: 'BGP_PEER_OF',
-              source: collectorNode.id,
-              target: peerNode.id,
-              evidence: lgEvidence,
-              metadata: { asPath: peer.asPath, nextHop: peer.nextHop, lastUpdated: peer.lastUpdated },
-            }),
-          )
-        }
-        const asnNode = createNode({ type: 'asn', identifier: asn, evidence: lgEvidence })
-        if (addNodeSafe(asnNode)) {
-          addEdgeSafe(
-            createEdge({
-              type: 'OBSERVED_IN_ROUTE',
-              source: collectorNode.id,
-              target: asnNode.id,
-              evidence: lgEvidence,
-              metadata: { asPath: peer.asPath },
-            }),
-          )
-        }
-      }
-    }
-  }
+  await processLookingGlass(context, ip, ipId)
 
   const abuse = await fetchAbuseContact(ip, context.signal)
   record(context, sourceKey('ripestat', 'abuse-contact-finder', ip), abuse)
@@ -517,7 +585,7 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
     }
   }
 
-  await processRoutingHistory(context, ip)
+  await processRoutingHistory(context, ip, ipId)
   markRoot(ipId, 'explored')
 }
 
@@ -529,11 +597,9 @@ async function processDomain(context: RunContext, domain: string, rootId: string
     types.map((type) => queryCloudflareDns(domain, type, context.signal)),
   )
 
-  let googleChecked = false
   if (!quick) {
     const google = await queryGoogleDns(domain, 'A', context.signal)
     record(context, sourceKey('google-dns', 'A', domain), google)
-    googleChecked = true
     if (google.data) {
       const root = useGraphStore.getState().nodes[rootId]
       if (root) addDnsRecords(google, root, domain)
@@ -543,10 +609,10 @@ async function processDomain(context: RunContext, domain: string, rootId: string
   const root = useGraphStore.getState().nodes[rootId]
   if (!root) return
   const discoveredIps: string[] = []
-  for (const result of results) {
-    record(context, sourceKey('cloudflare-dns', result.data?.type ?? 'unknown', domain), result)
+  results.forEach((result, index) => {
+    record(context, sourceKey('cloudflare-dns', types[index], domain), result)
     discoveredIps.push(...addDnsRecords(result, root, domain))
-  }
+  })
 
   if (!quick) {
     const rdap = await lookupDomain(domain, context.signal)
@@ -576,7 +642,7 @@ async function processDomain(context: RunContext, domain: string, rootId: string
     const ct = await searchCertificates(domain, context.signal)
     record(context, sourceKey('crt-sh', 'domain', domain), ct)
     if (ct.data) {
-      addCertificates(context, rootId, domain, ct)
+      addCertificates(rootId, domain, ct)
     }
   }
 
@@ -594,18 +660,15 @@ async function processDomain(context: RunContext, domain: string, rootId: string
 
   const hasData = Object.keys(useGraphStore.getState().nodes).length > 1
   markRoot(rootId, hasData ? 'explored' : 'no-data', hasData ? undefined : 'Источники не вернули данных')
-  void googleChecked
 }
 
 function addCertificates(
-  context: RunContext,
   rootId: string,
   zone: string,
   result: SourceResult<{ domain: string; certificates: Array<{ id: number; commonName?: string; names: string[]; issuerName?: string; notBefore?: string; notAfter?: string; serialNumber?: string }>; url: string }>,
 ): void {
   if (!result.data) return
   const evidence = evidenceFrom(result)
-  const zoneParts = zone.split('.')
   const seenNames = new Set<string>()
 
   for (const certificate of result.data.certificates.slice(0, MAX_CERTIFICATES)) {
@@ -633,7 +696,6 @@ function addCertificates(
       if (seenNames.size >= MAX_NAMES) break
       const clean = name.replace(/^\*\./, '')
       if (clean === zone || !clean.endsWith(`.${zone}`)) continue
-      if (!clean.split('.').includes(zoneParts[zoneParts.length - 2] ?? '')) continue
       if (seenNames.has(clean)) continue
       seenNames.add(clean)
       const domainNode = createNode({ type: 'domain', identifier: clean, evidence })
@@ -643,21 +705,23 @@ function addCertificates(
       }
     }
   }
-  void context
 }
 
 async function processPrefix(context: RunContext, prefix: string): Promise<void> {
   const prefixId = `prefix:${prefix.toLowerCase()}`
   const overview = await fetchPrefixOverview(prefix, context.signal)
   record(context, sourceKey('ripestat', 'prefix-overview', prefix), overview)
+  const asns: string[] = []
   if (overview.data) {
     const evidence = evidenceFrom(overview)
     for (const entry of overview.data.asns) {
       const asn = `AS${entry.asn}`
+      asns.push(asn)
       const asnNode = createNode({ type: 'asn', identifier: asn, evidence })
       if (addNodeSafe(asnNode)) {
         addEdgeSafe(createEdge({ type: 'ANNOUNCED_BY', source: prefixId, target: asnNode.id, evidence }))
       }
+      await enrichAsnOverview(context, asn, evidence)
     }
     for (const related of overview.data.relatedPrefixes.slice(0, 10)) {
       const node = createNode({ type: 'prefix', identifier: related, evidence })
@@ -671,9 +735,23 @@ async function processPrefix(context: RunContext, prefix: string): Promise<void>
   record(context, sourceKey('rdap', 'ip', prefix), rdap)
   if (rdap.data) addRdapEntities(prefixId, rdap)
 
-  const asns = Object.values(useGraphStore.getState().nodes)
-    .filter((node) => node.type === 'asn')
-    .map((node) => node.identifier)
+  if (asns[0]) {
+    const rpki = await fetchRpkiValidation(asns[0], prefix, context.signal)
+    record(context, sourceKey('ripestat', 'rpki-validation', `${asns[0]}:${prefix}`), rpki)
+    if (rpki.data) {
+      const prefixNode = useGraphStore.getState().nodes[prefixId]
+      if (prefixNode) {
+        useGraphStore.getState().addNode({
+          ...prefixNode,
+          metadata: { ...prefixNode.metadata, rpki: rpki.data },
+        })
+      }
+    }
+  }
+
+  await processLookingGlass(context, prefix, prefixId)
+  await processRoutingHistory(context, prefix, prefixId)
+
   for (const asn of asns.slice(0, 20)) {
     await processAsn(context, asn)
   }
