@@ -31,6 +31,8 @@ const CONFIDENCE_RANK: Record<Confidence, number> = {
   authoritative: 4,
 }
 
+const NODE_TYPES_MAP = { internet: InternetNodeView }
+
 function isNodeVisible(
   node: InternetNode,
   hidden: NodeType[],
@@ -38,8 +40,12 @@ function isNodeVisible(
   minConfidence: Confidence | 'all',
 ): boolean {
   if (hidden.includes(node.type)) return false
-  if (minConfidence !== 'all' && CONFIDENCE_RANK[node.sources[0]?.confidence ?? 'unknown'] < CONFIDENCE_RANK[minConfidence]) {
-    return false
+  if (minConfidence !== 'all') {
+    const rank = Math.max(
+      0,
+      ...node.sources.map((evidence) => CONFIDENCE_RANK[evidence.confidence]),
+    )
+    if (rank < CONFIDENCE_RANK[minConfidence]) return false
   }
   if (!search) return true
   const query = search.toLowerCase()
@@ -189,7 +195,7 @@ function GraphCanvas() {
       onNodeClick={onNodeClick}
       onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
-      nodeTypes={{ internet: InternetNodeView }}
+      nodeTypes={NODE_TYPES_MAP}
       minZoom={0.12}
       maxZoom={1.8}
       fitView

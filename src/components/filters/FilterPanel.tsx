@@ -14,11 +14,14 @@ export default function FilterPanel() {
   const toggleNodeType = useGraphStore((state) => state.toggleNodeType)
   const toggleEdgeType = useGraphStore((state) => state.toggleEdgeType)
   const nodes = useGraphStore((state) => state.nodes)
+  const edges = useGraphStore((state) => state.edges)
 
   const presentNodeTypes = NODE_TYPES.filter((type) =>
     Object.values(nodes).some((node) => node.type === type),
   )
-  const presentEdgeTypes = EDGE_TYPES
+  const presentEdgeTypes = EDGE_TYPES.filter((type) =>
+    Object.values(edges).some((edge) => edge.type === type),
+  )
 
   return (
     <section className="panel-section">
