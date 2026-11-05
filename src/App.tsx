@@ -43,11 +43,11 @@ function EmptyState({ running }: { running: boolean }) {
   return (
     <div className="empty-state">
       <div className="empty-state__inner">
-        <span className="empty-state__eyebrow">Инфраструктурный граф</span>
-        <h1>{running ? 'Собираю данные из публичных источников' : 'Введите объект исследования'}</h1>
+        <span className="empty-state__eyebrow">Карта интернет-инфраструктуры</span>
+        <h1>{running ? 'Собираю данные из публичных источников' : 'Увидьте, как на самом деле связан интернет'}</h1>
         <p>
-          Домен, IP-адрес, префикс или ASN. Граф соберётся из DNS, RDAP, RIPEstat и Certificate
-          Transparency. Каждая связь сохраняет источник и уверенность.
+          Spider Map собирает домены, IP-адреса, префиксы и ASN из публичных источников и показывает
+          подтверждённые связи с происхождением каждого факта.
         </p>
         <ul className="empty-examples">
           <li><code>example.com</code></li>

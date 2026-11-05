@@ -43,7 +43,7 @@ export default function TopBar({
     <header className="topbar">
       <div className="brand">
         <SpiderMark />
-        <span className="brand__name">spider-map</span>
+        <span className="brand__name">Spider Map</span>
       </div>
 
       <div className="topbar__search">

@@ -10,9 +10,9 @@ describe('App shell', () => {
 
   it('renders the search field and empty state', () => {
     render(<App />)
-    expect(screen.getByText('spider-map')).toBeInTheDocument()
+    expect(screen.getByText('Spider Map')).toBeInTheDocument()
     expect(screen.getByLabelText('Объект исследования')).toBeInTheDocument()
-    expect(screen.getByText('Введите объект исследования')).toBeInTheDocument()
+    expect(screen.getByText('Увидьте, как на самом деле связан интернет')).toBeInTheDocument()
   })
 
   it('renders the source panel', () => {

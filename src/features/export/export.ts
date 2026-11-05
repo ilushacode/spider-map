@@ -74,7 +74,7 @@ export async function importJson(file: File): Promise<string | null> {
     const text = await file.text()
     const parsed = JSON.parse(text) as unknown
     const validation = graphSnapshotSchema.safeParse(parsed)
-    if (!validation.success) return 'Файл не соответствует формату spider-map'
+    if (!validation.success) return 'Файл не соответствует формату Spider Map'
     useGraphStore.getState().loadSnapshot(validation.data as unknown as GraphSnapshot)
     return null
   } catch {
