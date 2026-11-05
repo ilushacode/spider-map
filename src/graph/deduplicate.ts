@@ -47,23 +47,13 @@ export function mergeLoadState(current: NodeLoadState, incoming: NodeLoadState):
 }
 
 export function mergeNodes(current: InternetNode, incoming: InternetNode): InternetNode {
-  const sources = mergeEvidence(current.sources, incoming.sources)
-  const independentSources = new Set(sources.map((evidence) => evidence.sourceId))
-  let confidence = incoming.sources.reduce<Confidence>(
-    (result, evidence) => (CONFIDENCE_RANK[evidence.confidence] > CONFIDENCE_RANK[result] ? evidence.confidence : result),
-    'unknown',
-  )
-  if (independentSources.size > 1 && confidence !== 'authoritative') confidence = 'corroborated'
-
   return {
     ...current,
     ...incoming,
     label: incoming.label || current.label,
     description: incoming.description ?? current.description,
     metadata: { ...current.metadata, ...incoming.metadata },
-    sources: sources.map((evidence) =>
-      evidence.confidence === confidence ? { ...evidence, confidence } : evidence,
-    ),
+    sources: mergeEvidence(current.sources, incoming.sources),
     firstSeen: current.firstSeen < incoming.firstSeen ? current.firstSeen : incoming.firstSeen,
     lastUpdated: current.lastUpdated > incoming.lastUpdated ? current.lastUpdated : incoming.lastUpdated,
     loadState: mergeLoadState(current.loadState, incoming.loadState),
