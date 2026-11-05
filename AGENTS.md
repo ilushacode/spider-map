@@ -1,14 +1,14 @@
 # AGENTS.md
 
 ## Что это за проект
-`spider-map` — браузерный исследовательский инструмент: строит граф интернет-инфраструктуры (домены, IP, префиксы, ASN, RDAP, CT) из публичных API. Полное ТЗ и ограничения — в `TASK.md` (читать перед любой продуктовой работой). Сейчас `src/` — нетронутый шаблон Vite/React, приложение ещё не реализовано.
+`spider-map` — браузерный исследовательский инструмент: строит граф интернет-инфраструктуры (домены, IP, префиксы, ASN, RDAP, CT) из публичных API. Полное ТЗ и ограничения — в `TASK.md` (читать перед любой продуктовой работой). Проверенные источники и CORS — в `docs/sources.md`.
 
 ## Команды
 - `npm run dev` — dev-сервер Vite
 - `npm run build` — `tsc -b && vite build` (сначала типы, потом сборка)
 - `npm run lint` — oxlint (конфиг `.oxlintrc.json`)
 - `npm run preview` — просмотр собранной версии
-- `npm test` — Vitest (после установки тестовой инфраструктуры)
+- `npm test` — Vitest (jsdom, тесты рядом с кодом: `*.test.ts(x)`)
 
 ## Git и коммиты
 - Репозиторий инициализирован; коммить после успешной реализации каждой крупной функции.
@@ -26,4 +26,5 @@
 - TypeScript: `verbatimModuleSyntax` (импорты типов — `import type`), `erasableSyntaxOnly` (без enum/parameter properties), `noUnusedLocals`/`noUnusedParameters` — сборка падает на неиспользуемом коде.
 - CSS пишется нативным вложенным синтаксисом (как в `src/App.css`), без препроцессоров.
 - Точка входа: `src/main.tsx` → `src/App.tsx`; статика в `public/`.
-- Стек из ТЗ (React Flow `@xyflow/react`, Zustand, Zod и т.д.) ещё не установлен — ставь только минимально необходимое.
+- Стек: React Flow (`@xyflow/react`), Zustand (`graph-store.ts`), Zod (схемы ответов), dagre (раскладка), lucide-react (иконки).
+- Данные и UI разделены: адаптеры в `src/services/sources/`, оркестратор в `src/features/investigation/`, модель графа в `src/graph/`.

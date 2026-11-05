@@ -1,32 +1,118 @@
-# React + TypeScript + Vite
+# spider-map
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Интерактивная карта интернет-инфраструктуры. Пользователь вводит домен, URL, IPv4, IPv6, CIDR или ASN, приложение запрашивает публичные источники и строит граф подтверждённых связей с происхождением каждого факта.
 
-Currently, two official plugins are available:
+Проект полностью клиентский: React + TypeScript + Vite, запросы выполняются из браузера через `fetch`. Бэкенда, прокси для обхода CORS и сканеров нет.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Запуск
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Проверки:
+
+```bash
+npm run build   # tsc -b && vite build
+npm run lint    # oxlint
+npm test        # vitest
+```
+
+## Архитектура
+
+```
+src/
+  app/                  # оболочка приложения (App.tsx)
+  components/           # UI: поиск, граф, панель узла, источники, фильтры
+  features/
+    investigation/      # оркестратор сбора и раскрытия узлов
+    export/             # JSON/CSV экспорт, импорт, сохранение
+  graph/                # типы, нормализация, дедупликация, store, layout
+  schemas/              # Zod-схемы внешних ответов и снимка графа
+  services/
+    http/               # allowlist, таймауты, повторы, дедупликация
+    cache/              # TTL-кэш с сохранением в localStorage
+    rate-limit/         # ограничение параллелизма
+    sources/            # адаптеры источников и реестр
+  styles/               # оформление
+  tests/                # настройка Vitest
+docs/sources.md         # проверенные источники, CORS и лимиты
+```
+
+Получение данных, нормализация и визуализация разделены. Адаптеры источников не знают о графе, оркестратор не знает о React Flow.
+
+## Поток исследования
+
+1. `normalizeInput` определяет тип ввода и нормализует значение.
+2. `runInvestigation` создаёт корневой узел и запускает сбор по типу объекта.
+3. Независимые запросы выполняются параллельно с ограничением параллелизма; ошибка одного источника не прерывает остальные.
+4. Результаты преобразуются в узлы и рёбра с `Evidence` и категорией уверенности.
+5. Новые данные добавляются в Zustand-store инкрементально, без перезагрузки страницы.
+6. `expandNode` раскрывает выбранный узел, используя кэш и защиту от повторных запросов.
+
+Режимы:
+
+- **Быстрый** — минимальный набор данных.
+- **Полный** — все применимые источники для исходного объекта и ближайших связей.
+- **Исследование** — ручное раскрытие узлов.
+
+## Источники
+
+| Источник | Данные |
+|---|---|
+| Cloudflare DNS-over-HTTPS | A, AAAA, CNAME, MX, NS, TXT, SOA, CAA, SRV |
+| Google Public DNS | проверка ключевых DNS-записей |
+| RIPE NCC RIPEstat | network-info, AS overview, announced prefixes, prefix overview, looking glass, RPKI, abuse contacts, routing history, prefix count |
+| IANA RDAP bootstrap | авторитетные RDAP-серверы для доменов, IP и ASN |
+| crt.sh | сертификаты и имена из Certificate Transparency (дополнительный источник) |
+
+Точные endpoint-ы, результаты проверки CORS и ограничения — в [docs/sources.md](docs/sources.md).
+
+## Модель графа
+
+Типы узлов и рёбер перечислены в `src/graph/types.ts`. У каждого ребра есть:
+
+- тип связи и читаемая подпись;
+- источник подтверждения (`sourceId`, URL, время получения);
+- категория уверенности: `authoritative`, `observed`, `corroborated`, `inferred`, `unknown`;
+- объяснение смысла связи.
+
+Правила:
+
+- одинаковые объекты дедуплицируются по стабильному ID;
+- источник и уверенность сохраняются при слиянии;
+- `SHARES_IP_WITH` означает только общий IP, не общее владение;
+- `HAS_SUBDOMAIN` строится только для подтверждённых поддоменов;
+- отсутствие данных показывается как «нет данных», а не как отрицательный факт.
+
+## Нормализация
+
+- домен — lowercase, IDNA (punycode), без завершающей точки;
+- IP — каноническая форма IPv4/IPv6;
+- ASN — `AS<number>`;
+- CIDR — нормализованный префикс;
+- сертификат — ID из crt.sh;
+- DNS-запись — имя + тип + значение.
+
+## Лимиты
+
+- до 8 одновременных HTTP-запросов, до 2 к одному хосту;
+- таймаут запроса 12 секунд, до 2 повторов для 429/5xx;
+- до 150 узлов и 300 рёбер за один автоматический этап;
+- до 20 IP, 25 префиксов, 50 сертификатов и 100 имён на этап;
+- кэш с TTL по категориям данных.
+
+## Экспорт и сохранение
+
+- экспорт снимка графа в JSON (с версией формата, временем, источниками и полнотой);
+- экспорт узлов и рёбер в CSV;
+- сохранение и восстановление состояния в localStorage;
+- импорт JSON с проверкой схемы и ограничением размера (5 МБ).
+
+## Известные ограничения
+
+- Доступность источников зависит от CORS и состояния внешних сервисов; crt.sh может быть недоступен.
+- RDAP-серверы и правила редактирования персональных данных различаются.
+- Географические данные приблизительны и не доказывают физическое местоположение сервера.
+- Приложение показывает только то, что удалось получить и обоснованно связать; оно не отображает «весь интернет».
