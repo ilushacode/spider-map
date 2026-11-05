@@ -70,9 +70,11 @@ export default function App() {
       const controller = new AbortController()
       controllerRef.current = controller
       setRunning(true)
+      const budget = window.setTimeout(() => controller.abort(), 75_000)
       try {
         await runInvestigation(input, mode, controller.signal)
       } finally {
+        window.clearTimeout(budget)
         if (controllerRef.current === controller) {
           setRunning(false)
         }

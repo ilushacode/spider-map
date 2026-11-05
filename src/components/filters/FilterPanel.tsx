@@ -1,4 +1,4 @@
-import { Search } from 'lucide-react'
+import { RotateCcw, Search } from 'lucide-react'
 import { useGraphStore } from '../../graph/graph-store'
 import {
   CONFIDENCE_LEVELS,
@@ -13,6 +13,7 @@ export default function FilterPanel() {
   const setFilters = useGraphStore((state) => state.setFilters)
   const toggleNodeType = useGraphStore((state) => state.toggleNodeType)
   const toggleEdgeType = useGraphStore((state) => state.toggleEdgeType)
+  const resetFilters = useGraphStore((state) => state.resetFilters)
   const nodes = useGraphStore((state) => state.nodes)
   const edges = useGraphStore((state) => state.edges)
 
@@ -93,6 +94,15 @@ export default function FilterPanel() {
           })}
         </div>
       </div>
+
+      {filters.hiddenNodeIds.length > 0 ? (
+        <p className="muted small">Скрыто вручную: {filters.hiddenNodeIds.length}</p>
+      ) : null}
+
+      <button type="button" className="ghost-button" onClick={resetFilters}>
+        <RotateCcw size={14} strokeWidth={1.5} />
+        Сбросить фильтры
+      </button>
     </section>
   )
 }

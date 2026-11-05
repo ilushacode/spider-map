@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Info, Radio, SlidersHorizontal } from 'lucide-react'
+import { Database, Info, Radio, SlidersHorizontal } from 'lucide-react'
 import { useGraphStore } from '../../graph/graph-store'
 import { NODE_VISUALS } from '../graph/node-visuals'
 import FilterPanel from '../filters/FilterPanel'
 import SourceStatusPanel from '../source-status/SourceStatusPanel'
+import DataSections from './DataSections'
 
-type Tab = 'overview' | 'sources' | 'filters'
+type Tab = 'overview' | 'data' | 'sources' | 'filters'
 
 const STATUS_TEXT = {
   idle: 'ожидание',
@@ -114,6 +115,10 @@ export default function Sidebar({ open }: { open: boolean }) {
           <Info size={15} strokeWidth={1.5} />
           Обзор
         </button>
+        <button type="button" className={tab === 'data' ? 'is-active' : ''} onClick={() => setTab('data')}>
+          <Database size={15} strokeWidth={1.5} />
+          Данные
+        </button>
         <button type="button" className={tab === 'sources' ? 'is-active' : ''} onClick={() => setTab('sources')}>
           <Radio size={15} strokeWidth={1.5} />
           Источники
@@ -126,6 +131,7 @@ export default function Sidebar({ open }: { open: boolean }) {
 
       <div className="sidebar-content">
         {tab === 'overview' ? <OverviewPanel /> : null}
+        {tab === 'data' ? <DataSections /> : null}
         {tab === 'sources' ? <SourceStatusPanel /> : null}
         {tab === 'filters' ? <FilterPanel /> : null}
       </div>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Check, Copy, ExternalLink, GitBranch, X } from 'lucide-react'
+import { Check, Copy, ExternalLink, EyeOff, GitBranch, Minimize2, X } from 'lucide-react'
 import { useGraphStore } from '../../graph/graph-store'
 import { expandNode } from '../../features/investigation/orchestrator'
 import { CONFIDENCE_LABELS, LOAD_STATE_LABELS, NODE_VISUALS } from '../graph/node-visuals'
@@ -42,6 +42,7 @@ export default function NodeDetailsPanel() {
   const edges = useGraphStore((state) => state.edges)
   const nodes = useGraphStore((state) => state.nodes)
   const setSelectedNode = useGraphStore((state) => state.setSelectedNode)
+  const hideNodes = useGraphStore((state) => state.hideNodes)
   const [copied, setCopied] = useState(false)
   const [expanding, setExpanding] = useState(false)
 
@@ -80,6 +81,47 @@ export default function NodeDetailsPanel() {
     } finally {
       setExpanding(false)
     }
+  }
+
+  const copySummary = async () => {
+    const summary = [
+      `${visual.label}: ${node.label}`,
+      node.identifier,
+      node.description,
+      `confidence: ${node.sources[0]?.confidence ?? 'unknown'}`,
+      `sources: ${node.sources.map((evidence) => evidence.sourceName).join(', ') || '—'}`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+    try {
+      await navigator.clipboard.writeText(summary)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
+    } catch {
+      setCopied(false)
+    }
+  }
+
+  const hideNode = () => {
+    hideNodes([node.id])
+    setSelectedNode(null)
+  }
+
+  const collapseBranch = () => {
+    const visited = new Set<string>([node.id])
+    const queue = [node.id]
+    const hidden: string[] = []
+    while (queue.length > 0) {
+      const current = queue.shift()
+      if (!current) break
+      for (const edge of Object.values(edges)) {
+        if (edge.source !== current || visited.has(edge.target)) continue
+        visited.add(edge.target)
+        hidden.push(edge.target)
+        queue.push(edge.target)
+      }
+    }
+    if (hidden.length > 0) hideNodes(hidden)
   }
 
   return (
@@ -173,10 +215,24 @@ export default function NodeDetailsPanel() {
           <pre>{JSON.stringify(node, null, 2)}</pre>
         </details>
 
-        <button type="button" className="primary-button" onClick={() => void expand()} disabled={expanding}>
-          <GitBranch size={15} strokeWidth={1.5} />
-          {expanding ? 'Раскрываю…' : 'Раскрыть связи'}
-        </button>
+        <div className="details-actions">
+          <button type="button" className="primary-button" onClick={() => void expand()} disabled={expanding}>
+            <GitBranch size={15} strokeWidth={1.5} />
+            {expanding ? 'Раскрываю…' : 'Раскрыть связи'}
+          </button>
+          <button type="button" className="ghost-button" onClick={() => void copySummary()}>
+            {copied ? <Check size={14} strokeWidth={1.5} /> : <Copy size={14} strokeWidth={1.5} />}
+            Сводка
+          </button>
+          <button type="button" className="ghost-button" onClick={collapseBranch}>
+            <Minimize2 size={14} strokeWidth={1.5} />
+            Свернуть ветку
+          </button>
+          <button type="button" className="ghost-button" onClick={hideNode}>
+            <EyeOff size={14} strokeWidth={1.5} />
+            Скрыть узел
+          </button>
+        </div>
       </div>
     </aside>
   )

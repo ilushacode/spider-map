@@ -529,6 +529,22 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
   record(context, sourceKey('rdap', 'ip', ip), rdap)
   if (rdap.data) {
     addRdapEntities(ipId, rdap)
+    const ipNode = useGraphStore.getState().nodes[ipId]
+    if (ipNode) {
+      useGraphStore.getState().addNode({
+        ...ipNode,
+        metadata: {
+          ...ipNode.metadata,
+          country: rdap.data.country,
+          ipVersion: rdap.data.ipVersion,
+          startAddress: rdap.data.startAddress,
+          endAddress: rdap.data.endAddress,
+          registrationHandle: rdap.data.handle,
+          registrationStatus: rdap.data.status,
+          registrationEvents: rdap.data.events,
+        },
+      })
+    }
   }
 
   if (network.data?.prefix) {
@@ -729,6 +745,11 @@ async function processPrefix(context: RunContext, prefix: string): Promise<void>
         addEdgeSafe(createEdge({ type: 'RELATED_PREFIX', source: prefixId, target: node.id, evidence }))
       }
     }
+  }
+
+  if (context.mode === 'quick') {
+    markRoot(prefixId, 'partial')
+    return
   }
 
   const rdap = await lookupIp(prefix.split('/')[0], context.signal)

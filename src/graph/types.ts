@@ -207,6 +207,7 @@ export interface NodeExpansionState {
 export interface GraphFilters {
   hiddenNodeTypes: NodeType[]
   hiddenEdgeTypes: EdgeType[]
+  hiddenNodeIds: string[]
   search: string
   minConfidence: Confidence | 'all'
 }

@@ -31,6 +31,9 @@ interface GraphState {
   setFilters: (patch: Partial<GraphFilters>) => void
   toggleNodeType: (type: NodeType) => void
   toggleEdgeType: (type: EdgeType) => void
+  hideNodes: (ids: string[]) => void
+  showNode: (id: string) => void
+  resetFilters: () => void
   reset: () => void
   loadSnapshot: (snapshot: GraphSnapshot) => void
 }
@@ -38,6 +41,7 @@ interface GraphState {
 const DEFAULT_FILTERS: GraphFilters = {
   hiddenNodeTypes: [],
   hiddenEdgeTypes: [],
+  hiddenNodeIds: [],
   search: '',
   minConfidence: 'all',
 }
@@ -161,6 +165,24 @@ export const useGraphStore = create<GraphState>()((set) => ({
         : [...state.filters.hiddenEdgeTypes, type]
       return { filters: { ...state.filters, hiddenEdgeTypes: hidden } }
     }),
+
+  hideNodes: (ids) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        hiddenNodeIds: [...new Set([...state.filters.hiddenNodeIds, ...ids])],
+      },
+    })),
+
+  showNode: (id) =>
+    set((state) => ({
+      filters: {
+        ...state.filters,
+        hiddenNodeIds: state.filters.hiddenNodeIds.filter((item) => item !== id),
+      },
+    })),
+
+  resetFilters: () => set({ filters: DEFAULT_FILTERS }),
 
   reset: () =>
     set({

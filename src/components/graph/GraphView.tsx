@@ -36,10 +36,11 @@ const NODE_TYPES_MAP = { internet: InternetNodeView }
 function isNodeVisible(
   node: InternetNode,
   hidden: NodeType[],
+  hiddenIds: string[],
   search: string,
   minConfidence: Confidence | 'all',
 ): boolean {
-  if (hidden.includes(node.type)) return false
+  if (hidden.includes(node.type) || hiddenIds.includes(node.id)) return false
   if (minConfidence !== 'all') {
     const rank = Math.max(
       0,
@@ -86,7 +87,7 @@ function GraphCanvas() {
   const { visibleNodeIds, visibleEdges } = useMemo(() => {
     const nodeIds = new Set<string>()
     for (const node of Object.values(storeNodes)) {
-      if (isNodeVisible(node, filters.hiddenNodeTypes, filters.search, filters.minConfidence)) {
+      if (isNodeVisible(node, filters.hiddenNodeTypes, filters.hiddenNodeIds, filters.search, filters.minConfidence)) {
         nodeIds.add(node.id)
       }
     }
