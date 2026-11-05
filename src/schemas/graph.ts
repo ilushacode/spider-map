@@ -69,6 +69,7 @@ const investigationSchema = z.object({
   startedAt: z.string(),
   finishedAt: z.string().optional(),
   rootNodeId: z.string().nullable(),
+  rootNodeIds: z.array(z.string()).optional(),
   sourceResults: z.record(z.string(), sourceResultSchema),
   counts: z.object({
     nodes: z.number(),

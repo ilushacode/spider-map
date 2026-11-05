@@ -2,6 +2,30 @@ import type { DataSource } from '../../graph/types'
 
 export const DATA_SOURCES: DataSource[] = [
   {
+    id: 'yandex-dns',
+    name: 'Яндекс DNS',
+    category: 'DNS',
+    baseUrl: 'https://dns.yandex.ru/dns-query',
+    docsUrl: 'https://dns.yandex.ru/',
+    cors: 'unknown',
+    ttlMs: 5 * 60_000,
+    description: 'Российский DNS-резолвер. Пробуется первым, при недоступности используется зарубежный резолвер.',
+    priority: 1,
+    origin: 'ru',
+  },
+  {
+    id: '2ip',
+    name: '2ip',
+    category: 'География',
+    baseUrl: 'https://api.2ip.me/geo.json',
+    docsUrl: 'https://2ip.ru/',
+    cors: 'supported',
+    ttlMs: 24 * 60 * 60_000,
+    description: 'Российский сервис геоданных по IP. Приоритетный источник геолокации.',
+    priority: 1,
+    origin: 'ru',
+  },
+  {
     id: 'cloudflare-dns',
     name: 'Cloudflare DNS',
     category: 'DNS',
@@ -10,7 +34,9 @@ export const DATA_SOURCES: DataSource[] = [
       'https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/',
     cors: 'supported',
     ttlMs: 5 * 60_000,
-    description: 'Основной DNS-over-HTTPS резолвер для A, AAAA, CNAME, MX, NS, TXT, SOA, CAA и SRV.',
+    description: 'DNS-over-HTTPS резолвер. Используется, если российский резолвер недоступен.',
+    priority: 2,
+    origin: 'international',
   },
   {
     id: 'google-dns',
@@ -21,6 +47,20 @@ export const DATA_SOURCES: DataSource[] = [
     cors: 'supported',
     ttlMs: 5 * 60_000,
     description: 'Независимый DNS-over-HTTPS резолвер для проверки ключевых записей.',
+    priority: 3,
+    origin: 'international',
+  },
+  {
+    id: 'ipwhois',
+    name: 'ipwho.is',
+    category: 'География',
+    baseUrl: 'https://ipwho.is/',
+    docsUrl: 'https://ipwho.is/',
+    cors: 'supported',
+    ttlMs: 24 * 60 * 60_000,
+    description: 'Зарубежный резервный источник геоданных, если 2ip недоступен.',
+    priority: 2,
+    origin: 'international',
   },
   {
     id: 'ripestat',
@@ -32,6 +72,8 @@ export const DATA_SOURCES: DataSource[] = [
     ttlMs: 15 * 60_000,
     description:
       'Сетевые сведения: network-info, AS overview, префиксы, looking glass, RPKI, abuse-контакты, история.',
+    priority: 2,
+    origin: 'international',
   },
   {
     id: 'rdap',
@@ -43,6 +85,8 @@ export const DATA_SOURCES: DataSource[] = [
     ttlMs: 6 * 60 * 60_000,
     description:
       'Авторитетные RDAP-серверы для доменов, IP и ASN, выбранные по bootstrap-файлам IANA.',
+    priority: 2,
+    origin: 'international',
   },
   {
     id: 'crt-sh',
@@ -53,6 +97,8 @@ export const DATA_SOURCES: DataSource[] = [
     cors: 'unknown',
     ttlMs: 6 * 60 * 60_000,
     description: 'Дополнительный источник сертификатов и имён из Certificate Transparency.',
+    priority: 3,
+    origin: 'international',
   },
 ]
 

@@ -227,7 +227,14 @@ export const useGraphStore = create<GraphState>()((set) => ({
     set((state) => ({
       nodes: Object.fromEntries(snapshot.nodes.map((node) => [node.id, node])),
       edges: Object.fromEntries(snapshot.edges.map((edge) => [edge.id, edge])),
-      investigation: snapshot.investigation,
+      investigation: snapshot.investigation
+        ? {
+            ...snapshot.investigation,
+            rootNodeIds:
+              snapshot.investigation.rootNodeIds ??
+              (snapshot.investigation.rootNodeId ? [snapshot.investigation.rootNodeId] : []),
+          }
+        : null,
       selectedNodeId: null,
       selectedEdgeId: null,
       filters: state.filters,

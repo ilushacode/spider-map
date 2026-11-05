@@ -86,4 +86,54 @@ describe('runInvestigation', () => {
     expect(useGraphStore.getState().investigation?.status).toBe('complete')
     expect(useGraphStore.getState().investigation?.counts.sourcesFailed).toBeGreaterThan(0)
   })
+
+  it('appends a second address to the same graph and shares nodes', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes('dns.yandex.ru')) return Promise.resolve(json({}, 429))
+        if (url.includes('cloudflare-dns.com') && url.includes('type=AAAA')) {
+          return Promise.resolve(json({ Status: 0, Answer: [] }))
+        }
+        if (url.includes('cloudflare-dns.com') && url.endsWith('type=A')) {
+          return Promise.resolve(
+            json({
+              Status: 0,
+              Answer: [{ name: 'shared.example.', type: 1, TTL: 300, data: '203.0.113.10' }],
+            }),
+          )
+        }
+        if (url.includes('stat.ripe.net/data/network-info')) {
+          return Promise.resolve(
+            json({
+              status: 'ok',
+              data: { resource: '203.0.113.10', prefix: '203.0.113.0/24', asns: [64500] },
+            }),
+          )
+        }
+        return Promise.resolve(json({}, 404))
+      }),
+    )
+
+    const controller = new AbortController()
+    await runInvestigation(
+      { type: 'domain', value: 'first.example', display: 'first.example' },
+      'quick',
+      controller.signal,
+    )
+    await runInvestigation(
+      { type: 'domain', value: 'second.example', display: 'second.example' },
+      'quick',
+      controller.signal,
+      true,
+    )
+
+    const state = useGraphStore.getState()
+    expect(state.investigation?.rootNodeIds).toHaveLength(2)
+    expect(state.nodes['domain:first.example']).toBeTruthy()
+    expect(state.nodes['domain:second.example']).toBeTruthy()
+    expect(state.nodes['ip:203.0.113.10']).toBeTruthy()
+    expect(state.edges['RESOLVES_TO:domain:first.example->ip:203.0.113.10']).toBeTruthy()
+    expect(state.edges['RESOLVES_TO:domain:second.example->ip:203.0.113.10']).toBeTruthy()
+  })
 })

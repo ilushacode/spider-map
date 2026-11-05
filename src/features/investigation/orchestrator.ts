@@ -14,6 +14,8 @@ import { searchCertificates } from '../../services/sources/certificate-transpare
 import { queryCloudflareDns } from '../../services/sources/cloudflare-dns'
 import type { DnsAnswer, DnsRecordType } from '../../services/sources/dns'
 import { queryGoogleDns } from '../../services/sources/google-dns'
+import { lookupGeoPreferred } from '../../services/sources/ip-geo'
+import { queryYandexDns } from '../../services/sources/yandex-dns'
 import { lookupAsn, lookupDomain, lookupIp } from '../../services/sources/rdap'
 import {
   fetchAbuseContact,
@@ -551,6 +553,49 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
     }
   }
 
+  const geo = await lookupGeoPreferred(ip, context.signal)
+  for (const attempt of geo.attempts) {
+    record(context, sourceKey(attempt.sourceId, 'geo', ip), attempt)
+  }
+  if (geo.result.data) {
+    const location = geo.result.data
+    const evidence = evidenceFrom(
+      geo.result,
+      'inferred',
+      'Приблизительные геоданные, не точное местоположение сервера',
+    )
+    const coordinates =
+      location.latitude !== undefined && location.longitude !== undefined
+        ? `${location.latitude},${location.longitude}`
+        : ip
+    const label =
+      [location.city, location.region, location.country].filter(Boolean).join(', ') || ip
+    const geoNode = createNode({
+      type: 'geographic-location',
+      identifier: coordinates,
+      label,
+      evidence,
+      metadata: {
+        ...location,
+        approximate: true,
+        forIp: ip,
+      },
+      completeness: 'partial',
+      loadState: 'explored',
+    })
+    if (addNodeSafe(geoNode)) {
+      addEdgeSafe(
+        createEdge({
+          type: 'HAS_GEOLOCATION',
+          source: ipId,
+          target: geoNode.id,
+          evidence,
+          label: '≈ геолокация',
+        }),
+      )
+    }
+  }
+
   if (network.data?.prefix) {
     const prefixOverview = await fetchPrefixOverview(network.data.prefix, context.signal)
     record(context, sourceKey('ripestat', 'prefix-overview', network.data.prefix), prefixOverview)
@@ -609,13 +654,49 @@ async function processIp(context: RunContext, ip: string): Promise<void> {
   markRoot(ipId, 'explored')
 }
 
+async function resolveDnsBatch(
+  context: RunContext,
+  name: string,
+  types: DnsRecordType[],
+): Promise<SourceResult<DnsAnswer>[]> {
+  if (types.length === 0) return []
+  const probeType = types.includes('A') ? 'A' : types[0]
+  const probe = await queryYandexDns(name, probeType, context.signal)
+  record(context, sourceKey(probe.sourceId, probeType, name), probe)
+
+  if (probe.status === 'ok') {
+    const rest = types.filter((type) => type !== probeType)
+    const restResults = await Promise.all(
+      rest.map(async (type) => {
+        const result = await queryYandexDns(name, type, context.signal)
+        record(context, sourceKey(result.sourceId, type, name), result)
+        if (result.status !== 'ok' && !context.signal.aborted) {
+          const fallback = await queryCloudflareDns(name, type, context.signal)
+          record(context, sourceKey('cloudflare-dns', type, name), fallback)
+          return fallback
+        }
+        return result
+      }),
+    )
+    return types.map((type) =>
+      type === probeType ? probe : restResults[rest.indexOf(type)],
+    )
+  }
+
+  const cloudflare = await Promise.all(
+    types.map((type) => queryCloudflareDns(name, type, context.signal)),
+  )
+  cloudflare.forEach((result, index) => {
+    record(context, sourceKey('cloudflare-dns', types[index], name), result)
+  })
+  return cloudflare
+}
+
 async function processDomain(context: RunContext, domain: string, rootId: string): Promise<void> {
   const quick = context.mode === 'quick'
   const types: DnsRecordType[] = quick ? ['A', 'AAAA'] : ['A', 'AAAA', 'CNAME', 'MX', 'NS', 'TXT', 'SOA', 'CAA']
 
-  const results = await Promise.all(
-    types.map((type) => queryCloudflareDns(domain, type, context.signal)),
-  )
+  const results = await resolveDnsBatch(context, domain, types)
 
   if (!quick) {
     const google = await queryGoogleDns(domain, 'A', context.signal)
@@ -629,8 +710,7 @@ async function processDomain(context: RunContext, domain: string, rootId: string
   const root = useGraphStore.getState().nodes[rootId]
   if (!root) return
   const discoveredIps: string[] = []
-  results.forEach((result, index) => {
-    record(context, sourceKey('cloudflare-dns', types[index], domain), result)
+  results.forEach((result) => {
     discoveredIps.push(...addDnsRecords(result, root, domain))
   })
 
@@ -787,33 +867,56 @@ export async function runInvestigation(
   input: NormalizedInput,
   mode: InvestigationMode,
   signal: AbortSignal,
+  append = false,
 ): Promise<void> {
   const store = useGraphStore.getState()
-  store.reset()
+  const previous = store.investigation
+  const shouldAppend = append && Boolean(previous)
+  if (!shouldAppend) store.reset()
   deferredCount = 0
+
   const root = rootNode(input)
-  const investigation: Investigation = {
-    id: newId(),
-    input: input.display,
-    normalized: input.value,
-    inputType: input.type,
-    mode,
-    status: 'collecting',
-    startedAt: new Date().toISOString(),
-    rootNodeId: root.id,
-    sourceResults: {},
-    counts: {
-      nodes: 1,
-      edges: 0,
-      sourcesOk: 0,
-      sourcesPartial: 0,
-      sourcesFailed: 0,
-      deferred: 0,
-    },
-    errors: [],
-  }
+  const previousRoots =
+    previous?.rootNodeIds ??
+    (previous?.rootNodeId ? [previous.rootNodeId] : [])
+  const rootNodeIds = shouldAppend
+    ? [...new Set([...previousRoots, root.id])]
+    : [root.id]
+
+  const investigation: Investigation =
+    shouldAppend && previous
+      ? {
+          ...previous,
+          status: 'collecting',
+          finishedAt: undefined,
+          rootNodeIds,
+          errors: [],
+        }
+      : {
+          id: newId(),
+          input: input.display,
+          normalized: input.value,
+          inputType: input.type,
+          mode,
+          status: 'collecting',
+          startedAt: new Date().toISOString(),
+          rootNodeId: root.id,
+          rootNodeIds,
+          sourceResults: {},
+          counts: {
+            nodes: 1,
+            edges: 0,
+            sourcesOk: 0,
+            sourcesPartial: 0,
+            sourcesFailed: 0,
+            deferred: 0,
+          },
+          errors: [],
+        }
+
   useGraphStore.getState().setInvestigation(investigation)
   useGraphStore.getState().addNode(root)
+  if (shouldAppend) useGraphStore.getState().setSelectedNode(root.id)
 
   const context: RunContext = {
     signal,

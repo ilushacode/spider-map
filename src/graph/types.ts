@@ -56,8 +56,11 @@ export const CONFIDENCE_LEVELS = [
 export type Confidence = (typeof CONFIDENCE_LEVELS)[number]
 
 export const SOURCE_IDS = [
+  'yandex-dns',
+  '2ip',
   'cloudflare-dns',
   'google-dns',
+  'ipwhois',
   'ripestat',
   'rdap',
   'crt-sh',
@@ -153,6 +156,8 @@ export interface DataSource {
   cors: 'supported' | 'unknown' | 'unsupported'
   ttlMs: number
   description: string
+  priority: number
+  origin: 'ru' | 'international'
 }
 
 export type SourceStatus =
@@ -184,6 +189,7 @@ export interface Investigation {
   startedAt: string
   finishedAt?: string
   rootNodeId: string | null
+  rootNodeIds: string[]
   sourceResults: Record<string, SourceResult<unknown>>
   counts: {
     nodes: number

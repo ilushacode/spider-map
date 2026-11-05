@@ -25,8 +25,10 @@ export interface DnsRecord {
   data: string
 }
 
+export type DnsResolver = 'yandex' | 'cloudflare' | 'google'
+
 export interface DnsAnswer {
-  resolver: 'cloudflare' | 'google'
+  resolver: DnsResolver
   name: string
   type: DnsRecordType
   status: number
@@ -36,10 +38,11 @@ export interface DnsAnswer {
 }
 
 export interface DnsResolverConfig {
-  resolver: 'cloudflare' | 'google'
+  resolver: DnsResolver
   sourceId: SourceId
   buildUrl: (name: string, type: string) => string
   headers: Record<string, string>
+  retries?: number
 }
 
 export async function queryDns(
@@ -56,6 +59,7 @@ export async function queryDns(
     cacheKey: `dns:${config.resolver}:${name}:${type}`,
     ttlMs: 5 * 60_000,
     sourceId: config.sourceId,
+    retries: config.retries,
   })
 
   if (!response.ok || !response.data) {

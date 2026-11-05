@@ -1,4 +1,7 @@
 const STATIC_ALLOWED_HOSTS = new Set([
+  'dns.yandex.ru',
+  'api.2ip.me',
+  'ipwho.is',
   'cloudflare-dns.com',
   'dns.google',
   'stat.ripe.net',
