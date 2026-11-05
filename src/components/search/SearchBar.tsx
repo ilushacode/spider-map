@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Clock3, Play, Search, Square, X } from 'lucide-react'
 import { normalizeInput } from '../../graph/normalize'
-import type { InvestigationMode, NormalizedInput } from '../../graph/types'
+import type { NormalizedInput } from '../../graph/types'
 
 const HISTORY_KEY = 'spider-map:history:v1'
 
@@ -16,14 +16,12 @@ function loadHistory(): string[] {
 }
 
 interface SearchBarProps {
-  mode: InvestigationMode
-  onModeChange: (mode: InvestigationMode) => void
   onRun: (input: NormalizedInput) => void
   onStop: () => void
   running: boolean
 }
 
-export default function SearchBar({ mode, onModeChange, onRun, onStop, running }: SearchBarProps) {
+export default function SearchBar({ onRun, onStop, running }: SearchBarProps) {
   const [value, setValue] = useState('')
   const [history, setHistory] = useState<string[]>(loadHistory)
   const [showHistory, setShowHistory] = useState(false)
@@ -64,6 +62,8 @@ export default function SearchBar({ mode, onModeChange, onRun, onStop, running }
           onBlur={() => window.setTimeout(() => setShowHistory(false), 120)}
           placeholder="example.com, 1.1.1.1, AS13335, 104.16.0.0/13"
           aria-label="Объект исследования"
+          aria-invalid={hasError}
+          title={hasError ? normalized.error : undefined}
           spellCheck={false}
           autoComplete="off"
         />
@@ -103,34 +103,6 @@ export default function SearchBar({ mode, onModeChange, onRun, onStop, running }
           ))}
         </div>
       ) : null}
-
-      <div className="search__meta">
-        <div className="mode-switch" role="group" aria-label="Режим исследования">
-          {(
-            [
-              ['quick', 'Быстрый'],
-              ['full', 'Полный'],
-              ['explore', 'Исследование'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={mode === id ? 'is-active' : ''}
-              onClick={() => onModeChange(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-        <span className={`search__hint${hasError ? ' is-error' : ''}`}>
-          {hasError
-            ? normalized.error
-            : value.trim()
-              ? `${normalized.type} · ${normalized.value || '—'}`
-              : 'Тип определяется автоматически'}
-        </span>
-      </div>
     </div>
   )
 }

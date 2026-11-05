@@ -44,15 +44,33 @@ export default function TopBar({
         <span className="brand__name">spider-map</span>
       </div>
 
-      <SearchBar
-        mode={mode}
-        onModeChange={onModeChange}
-        onRun={onRun}
-        onStop={onStop}
-        running={running}
-      />
+      <div className="topbar__search">
+        <SearchBar onRun={onRun} onStop={onStop} running={running} />
+      </div>
 
-      <div className="topbar__actions">
+      <div className="topbar__block topbar__mode">
+        <span className="topbar__label">Режим</span>
+        <div className="mode-switch" role="group" aria-label="Режим исследования">
+          {(
+            [
+              ['quick', 'Быстрый'],
+              ['full', 'Полный'],
+              ['explore', 'Исследование'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              className={mode === id ? 'is-active' : ''}
+              onClick={() => onModeChange(id)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="topbar__block topbar__actions">
         <button
           type="button"
           className="icon-button"
