@@ -16,7 +16,7 @@ export interface CreateNodeInput {
   label?: string
   description?: string
   metadata?: Record<string, unknown>
-  evidence: Evidence
+  evidence?: Evidence
   childCount?: number
   loadState?: NodeLoadState
   completeness?: InternetNode['completeness']
@@ -31,7 +31,7 @@ export function createNode(input: CreateNodeInput): InternetNode {
     identifier: input.identifier,
     description: input.description,
     metadata: input.metadata ?? {},
-    sources: [input.evidence],
+    sources: input.evidence ? [input.evidence] : [],
     firstSeen: now,
     lastUpdated: now,
     loadState: input.loadState ?? 'unexplored',
