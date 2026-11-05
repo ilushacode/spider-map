@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { mergeEdges, mergeNodes } from './deduplicate'
+import { CONFIDENCE_LEVELS, EDGE_TYPES, NODE_TYPES } from './types'
 import type {
   EdgeType,
   GraphFilters,
@@ -38,12 +39,40 @@ interface GraphState {
   loadSnapshot: (snapshot: GraphSnapshot) => void
 }
 
+const FILTERS_KEY = 'spider-map:filters:v1'
+
 const DEFAULT_FILTERS: GraphFilters = {
   hiddenNodeTypes: [],
   hiddenEdgeTypes: [],
   hiddenNodeIds: [],
   search: '',
   minConfidence: 'all',
+}
+
+function loadFilters(): GraphFilters {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return DEFAULT_FILTERS
+    const parsed = JSON.parse(raw) as Partial<GraphFilters>
+    return {
+      hiddenNodeTypes: Array.isArray(parsed.hiddenNodeTypes)
+        ? parsed.hiddenNodeTypes.filter((type): type is NodeType => NODE_TYPES.includes(type))
+        : [],
+      hiddenEdgeTypes: Array.isArray(parsed.hiddenEdgeTypes)
+        ? parsed.hiddenEdgeTypes.filter((type): type is EdgeType => EDGE_TYPES.includes(type))
+        : [],
+      hiddenNodeIds: Array.isArray(parsed.hiddenNodeIds)
+        ? parsed.hiddenNodeIds.filter((id): id is string => typeof id === 'string')
+        : [],
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      minConfidence:
+        parsed.minConfidence === 'all' || CONFIDENCE_LEVELS.includes(parsed.minConfidence as never)
+          ? (parsed.minConfidence as GraphFilters['minConfidence'])
+          : 'all',
+    }
+  } catch {
+    return DEFAULT_FILTERS
+  }
 }
 
 function withCounts(
@@ -74,7 +103,7 @@ export const useGraphStore = create<GraphState>()((set) => ({
   investigation: null,
   selectedNodeId: null,
   selectedEdgeId: null,
-  filters: DEFAULT_FILTERS,
+  filters: loadFilters(),
 
   addNode: (node) =>
     set((state) => {
@@ -185,22 +214,35 @@ export const useGraphStore = create<GraphState>()((set) => ({
   resetFilters: () => set({ filters: DEFAULT_FILTERS }),
 
   reset: () =>
-    set({
+    set((state) => ({
       nodes: {},
       edges: {},
       investigation: null,
       selectedNodeId: null,
       selectedEdgeId: null,
-      filters: DEFAULT_FILTERS,
-    }),
+      filters: state.filters,
+    })),
 
   loadSnapshot: (snapshot) =>
-    set({
+    set((state) => ({
       nodes: Object.fromEntries(snapshot.nodes.map((node) => [node.id, node])),
       edges: Object.fromEntries(snapshot.edges.map((edge) => [edge.id, edge])),
       investigation: snapshot.investigation,
       selectedNodeId: null,
       selectedEdgeId: null,
-      filters: DEFAULT_FILTERS,
-    }),
+      filters: state.filters,
+    })),
 }))
+
+let lastPersistedFilters = ''
+
+useGraphStore.subscribe((state) => {
+  const serialized = JSON.stringify(state.filters)
+  if (serialized === lastPersistedFilters) return
+  lastPersistedFilters = serialized
+  try {
+    localStorage.setItem(FILTERS_KEY, serialized)
+  } catch {
+    // Persistence is optional.
+  }
+})
