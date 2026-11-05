@@ -64,7 +64,7 @@
 .brand {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   color: var(--accent);
   flex: 0 0 auto;
 }
@@ -445,8 +445,8 @@
 .source-row {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 6px;
+  gap: 8px;
+  padding: 6px 8px;
   border-radius: 6px;
 }
 
@@ -582,7 +582,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .type-counts li {
@@ -600,7 +600,7 @@
 .subtab-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 3px;
+  gap: 4px;
   margin-bottom: 10px;
 }
 
@@ -637,7 +637,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 4px 6px;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -729,7 +729,7 @@
 .chip {
   border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 3px 7px;
+  padding: 4px 8px;
   background: transparent;
   color: var(--text-3);
   font-size: 10.5px;
@@ -1062,7 +1062,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 8px;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -1079,7 +1079,7 @@
 .details-badges {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
 
 .state-badge {
@@ -1122,7 +1122,7 @@
 .edge-endpoint {
   flex: 1 1 0;
   min-width: 0;
-  padding: 7px 8px;
+  padding: 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-2);
@@ -1161,7 +1161,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 5px 6px;
+  padding: 4px 6px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -1195,7 +1195,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 5px 6px;
+  padding: 4px 6px;
   border-radius: 5px;
   color: var(--text-2);
   text-decoration: none;
@@ -1210,14 +1210,14 @@
 .evidence-meta {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-family: var(--mono);
   font-size: 9.5px;
   color: var(--text-3);
 }
 
 .error-list li {
-  padding: 5px 6px;
+  padding: 4px 6px;
   border-radius: 5px;
   background: rgba(217, 123, 123, 0.08);
   color: var(--red);
@@ -1248,7 +1248,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 8px;
   height: 34px;
   border: 0;
   border-radius: var(--radius-sm);
